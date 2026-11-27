@@ -11,14 +11,21 @@
       nixpkgs = logos-module-builder.inputs.nixpkgs;
       meta = builtins.fromJSON (builtins.readFile ./metadata.json);
       devSystems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
+      systems = devSystems ++ [ "x86_64-windows" ];
+      libp2p = libp2p_module.inputs.libp2p;
       libp2pInputs = {
         packages = nixpkgs.lib.genAttrs devSystems (system: {
-          cbind = libp2p_module.inputs.libp2p.packages.${system}.cbind.overrideAttrs (old: {
+          cbind = libp2p.packages.${system}.cbind.overrideAttrs (old: {
             buildPhase = builtins.replaceStrings
               [ "--threads:on --opt:size --noMain --mm:refc --d:metrics" ]
               [ "--threads:on --opt:size --noMain --mm:refc --d:metrics -d:chronicles_runtime_filtering=on" ]
               old.buildPhase;
           });
+        } // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          cbind-windows-x86_64 = import ./nix/libp2p-cbind-windows.nix {
+            pkgs = logos-module-builder.inputs.logos-nix.lib.mkWindowsPkgs { buildSystem = system; };
+            src = libp2p;
+          };
         });
       };
       module = logos-module-builder.lib.mkLogosModule {
@@ -31,6 +38,10 @@
         libp2p = {
           input = libp2pInputs;
           packages.default = "cbind";
+          systems.x86_64-windows = {
+            system = "x86_64-linux";
+            packages.default = "cbind-windows-x86_64";
+          };
         };
       };
       nodeTests = nixpkgs.lib.genAttrs devSystems (system:
@@ -52,8 +63,12 @@
         }).${system}.unit-tests);
     in
     module // {
-      packages = nixpkgs.lib.genAttrs devSystems (system:
-        (module.packages.${system} or { }) // { node-tests = nodeTests.${system}; });
+      packages = nixpkgs.lib.genAttrs systems (system:
+        (module.packages.${system} or { })
+        // nixpkgs.lib.optionalAttrs (nodeTests ? ${system}) { node-tests = nodeTests.${system}; }
+        // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          inherit (libp2pInputs.packages.${system}) cbind-windows-x86_64;
+        });
       checks = nixpkgs.lib.genAttrs devSystems (system:
         (module.checks.${system} or { }) // { node-tests = nodeTests.${system}; });
       apps = nixpkgs.lib.genAttrs devSystems (system:

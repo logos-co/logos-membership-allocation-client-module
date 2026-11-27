@@ -12,6 +12,12 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/metadata.json
 
 find_package(nlohmann_json REQUIRED)
 
+if(WIN32)
+    find_library(TINYCBOR_LIB NAMES libtinycbor.a PATHS $ENV{LOGOS_EXT_ROOT_LIBP2P}/lib ${CMAKE_CURRENT_SOURCE_DIR}/lib NO_DEFAULT_PATH REQUIRED)
+else()
+    set(TINYCBOR_LIB tinycbor)
+endif()
+
 logos_module(
     NAME membership_allocation_client_module
     SOURCES
@@ -20,7 +26,7 @@ logos_module(
     EXTERNAL_LIBS
         libp2p
     LINK_LIBRARIES
-        tinycbor
+        ${TINYCBOR_LIB}
 )
 
 target_link_libraries(membership_allocation_client_module_module_plugin PUBLIC nlohmann_json::nlohmann_json)
